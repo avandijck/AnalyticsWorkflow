@@ -1,0 +1,162 @@
+---
+title: "Analytics Workflow"
+author: "Andreas Van Dijck"
+date: "9/23/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+This file is part of my business value proposition. My propisition consists of developing a linear regression model to show what factors constitute a wine with a high expert rating. The full datasets were obtained from http://www3.dsi.uminho.pt/pcortez/wine/. 
+
+## Data Description
+
+This dataset contains 6,497 total observations of 13 different variables. According to the Data Explorer report in R, there are zero missing columns but 12 missing observations. The variables and their data types are as follows:
+
+Color (R=Red, W=White). Qualitative, nominal variable or a factor with two levels. 
+
+Fixed acidity: measures the amount of acids in the wine (grams per liter) that do not evaporate. Quantitative, continuous variable. Numeric in R. 
+
+Volatile acidity: amount of acetic acid in wine (grams per liter) that can evaporate. Quantitative, continuous variable. Numeric in R. 
+
+Residual sugar: measures the amount of sugar in the wine (grams per liter). Quantitative, continuous variable. Numeric in R. 
+
+Chlorides: amount of salt in the wine (grams per liter). Quantitative, continuous variable. Numeric in R. 
+Free sulfur dioxide: the amount of Sulfur dioxide in wine at the molecular level (as a dissolved gas), measured in milligrams per liter. Quantitative, continuous variable. Numeric in R. 
+
+Total sulfur dioxide: all forms of sulfur dioxide in wine in milligrams per liter. Quantitative, continuous variable. Numeric in R. 
+
+Density: the liquid’s weight in grams per milliliter. Quantitative, continuous variable. Numeric in R. 
+
+pH: describes how acidic or basic a wine is on a scale from 0 (very acidic) to 14 (very basic). Quantitative, continuous variable. Numeric in R. 
+
+Sulphates: the amount of sulphates in the wine measured in grams per liter. Quantitative, continuous variable. Numeric in R. 
+
+Alcohol: the wine’s percentage alcohol content. Quantitative, continuous variable. Numeric in R. 
+
+Quality: an expert rating between 0 and 10 based on sensory data describing the overall quality of the wine. Quantitative, discrete variable. Integer in R. 
+
+## Data Preprocessing 
+
+To preprocess the data, I combined the spreadsheets for white wines and red wines into one spreadsheet so that all of the wine data is in one place. I also looked at the data to make sure everything was in the right place. 
+
+
+
+The first step is to load the data into R as follows, and then check the class objects to make sure everything is coded correctly:
+
+```{r}
+wine<-read.csv("winequalityN.csv")
+str(wine)
+```
+
+## Check Target Variable 
+
+To understand the nature of the target variable, wine quality, I construct a histogram to check its distribution. According to the output below, wine quality appears to be roughly normally distributed. 
+
+```{r}
+library(ggplot2)
+# Building histogram
+ggplot(data=wine, aes(quality)) +
+  geom_histogram(aes(y =..density..), fill = "orange") 
+  
+```
+
+
+## Getting a quick summary 
+
+Using the skimr package, I can get a quick summary of each variable and check for missing observations.
+
+```{r}
+library(skimr)
+skim(wine)
+```
+
+## Remove missing values 
+
+After checking for missing values, I perform a simple function to remove these values from the dataset, and check the dimensions to make sure the dataset is still sound. 
+
+```{r}
+wine_clean<-na.omit(wine)
+dim(wine_clean)
+
+```
+
+Dropping missing observations did not change the total number of rows by much, so there is no need for imputation. 
+
+## Split the data into testing and validation sets 
+
+```{r}
+library(caret) #this package has the createDataPartition function
+    
+ set.seed(123) #randomization so that results are reproducible 
+    
+ #creating indices
+ trainIndex <- createDataPartition(wine_clean$quality,p=0.75,list=FALSE)
+    
+ #splitting data into training/testing data using the trainIndex object
+ wine_train <- wine_clean[trainIndex,] #training data (75% of data)
+    
+ wine_test <- wine_clean[-trainIndex,] #testing data (25% of data) 
+```
+
+## Ininitialize an algorithim to fit a linear regression model 
+
+To start the process of deciding what variables to include in the model, I first build a full model with all the variables. 
+```{r}
+full<-lm(quality~.,data=wine_train)
+options(scipen = 999) #Gets numbers out of scientific notation
+summary(full)
+
+```
+
+Next, I perfrom a stepwise regression using AIC as the selection criteria. 
+
+```{r}
+null<-lm(quality~1, data=wine_train)
+lm.step<-step(null, scope=list(lower=null, upper=full), direction="both", trace=0)#trace=0 suppresses output.  Change trace=1 or 2 to get more
+summary(lm.step)
+```
+
+## Compare the full and reduced models 
+
+```{r}
+library(forecast) #This package can calculate RMSE to compare the performances of the models
+p.full<-predict(full, newdata=wine_test) #Get predicted values on test data 
+p.step<-predict(lm.step, newdata=wine_test)
+head(p.full)
+```
+
+```{r}
+head(p.step)
+```
+
+After taking a look at the predicted values for the test data, I use accuracy() to get the RMSE 
+
+```{r}
+accuracy(p.full, wine_test$quality)
+```
+```{r}
+accuracy(p.step, wine_test$quality)
+```
+
+The differences in the performance metrics for these models is very small, but the lm.step model has slightly lower RMSE and MAE, which means the stepwise model is slightly more accurate because the the variations of errors is slightly lower than in the full model.
+
+```{r}
+plot(lm.step)
+```
+
+The residuals vs fitted values plot and the normal-qq plot help us evaluate the model by seeing how the residuals are distributed. 
+
+## Conclusion
+
+In conclusion, this model is what I am offering as a business value proposition to negate the need for money and time being spent on taste testing, which is subject to human error and bias. This model would therefore save a client(e.g. a buyer for a wine company) time and money, and help them more easily identify what "good" wines are. 
+
+The final regression equation (with the slope coefficients rounded very slightly) is as follows:
+
+lm(formula = quality ~ .21(alcohol) -1.53(volatile.acidity) + .8(sulphates) + 
+    .066(residual.sugar) -.38(type) -112.85(density) -.94(chlorides) + .54(pH) + .083(fixed.acidity) + 
+    .003(free.sulfur.dioxide) -.001(total.sulfur.dioxide)
